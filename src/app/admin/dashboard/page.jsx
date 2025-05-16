@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { useAuth } from '../../lib/auth';
+import { useAuth } from '../../lib/authContext';
 import MetricCard from '../../components/Matriccard';
 import RecentActivity from '../../components/RecentActivity';
 
