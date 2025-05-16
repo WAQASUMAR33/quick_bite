@@ -1,0 +1,188 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        Int       @id @default(autoincrement())
+  email     String    @unique
+  password  String
+  name      String
+  phone     String?
+  city      String
+  address   String
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  bookings  Booking[]
+  orders    Order[]
+  payments  Payment[]
+}
+
+enum RestaurantStatus {
+  ACTIVE
+  DE_ACTIVE
+}
+
+model Restaurant {
+  id            Int          @id @default(autoincrement())
+  name          String
+  email         String       @unique
+  password      String
+  address       String
+  phone         String
+  description   String?
+  logo          String?
+  bgImage       String?
+  status        RestaurantStatus @default(DE_ACTIVE)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  tables        Table[]
+  parkingSlots  ParkingSlot[]
+  categories    Category[]
+  bookings      Booking[]
+  orders        Order[]
+}
+
+model Table {
+  id            Int          @id @default(autoincrement())
+  restaurantId  Int
+  restaurant    Restaurant   @relation(fields: [restaurantId], references: [id])
+  tableNumber   String
+  capacity      Int
+  status        TableStatus  @default(AVAILABLE)
+  bookings      Booking[]
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+}
+
+model Admin {
+  id            Int          @id @default(autoincrement())
+  email         String       @unique
+  password      String
+  name          String
+  role          String       @default("Admin")
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+}
+
+model ParkingSlot {
+  id            Int          @id @default(autoincrement())
+  restaurantId  Int
+  restaurant    Restaurant   @relation(fields: [restaurantId], references: [id])
+  slotNumber    String
+  status        ParkingStatus @default(AVAILABLE)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+}
+
+model Category {
+  id            Int          @id @default(autoincrement())
+  restaurantId  Int
+  restaurant    Restaurant   @relation(fields: [restaurantId], references: [id])
+  name          String
+  dishes        Dish[]
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+}
+
+model Dish {
+  id            Int          @id @default(autoincrement())
+  categoryId    Int
+  category      Category     @relation(fields: [categoryId], references: [id])
+  name          String
+  description   String?
+  price         Float
+  available     Boolean      @default(true)
+  orderItems    OrderItem[]
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+}
+
+model Booking {
+  id            Int          @id @default(autoincrement())
+  userId        Int
+  user          User         @relation(fields: [userId], references: [id])
+  restaurantId  Int
+  restaurant    Restaurant   @relation(fields: [restaurantId], references: [id])
+  tableId       Int
+  table         Table        @relation(fields: [tableId], references: [id])
+  bookingTime   DateTime
+  status        BookingStatus @default(PENDING)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+}
+
+model Order {
+  id            Int          @id @default(autoincrement())
+  userId        Int
+  user          User         @relation(fields: [userId], references: [id])
+  restaurantId  Int
+  restaurant    Restaurant   @relation(fields: [restaurantId], references: [id])
+  orderItems    OrderItem[]
+  totalAmount   Float
+  status        OrderStatus  @default(PENDING)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  payment       Payment?
+}
+
+model OrderItem {
+  id            Int          @id @default(autoincrement())
+  orderId       Int
+  order         Order        @relation(fields: [orderId], references: [id])
+  dishId        Int
+  dish          Dish         @relation(fields: [dishId], references: [id])
+  quantity      Int
+  price         Float
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+}
+
+model Payment {
+  id            Int          @id @default(autoincrement())
+  userId        Int
+  user          User         @relation(fields: [userId], references: [id])
+  orderId       Int          @unique
+  order         Order        @relation(fields: [orderId], references: [id])
+  amount        Float
+  accountNumber String
+  status        PaymentStatus @default(PENDING)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+}
+
+enum TableStatus {
+  AVAILABLE
+  OCCUPIED
+  RESERVED
+}
+
+enum ParkingStatus {
+  AVAILABLE
+  OCCUPIED
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  PREPARING
+  DELIVERED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+}
