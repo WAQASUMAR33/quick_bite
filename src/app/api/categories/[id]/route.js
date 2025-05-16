@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import prisma from '../../../../utils/prisma';
+import prisma from '@/utils/prisma';
 
 // PUT /api/categories/[id]
 export async function PUT(request, { params }) {
