@@ -1,5 +1,5 @@
 // import './globals.css';
-import { AuthProvider } from '../lib/auth';
+import { AuthProvider } from '../lib/authContext';
 import Sidebar from '../components/Sidebar';
 import Header from '../components/Header';
 
