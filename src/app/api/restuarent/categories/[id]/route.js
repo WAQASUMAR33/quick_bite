@@ -24,12 +24,12 @@ export async function GET(request, { params }) {
     }
 
     // Fetch tables for the restaurant
-    const tables = await prisma.Category.findMany({
+    const categories  = await prisma.Category.findMany({
       where: { restaurantId: restaurantIdInt },
     });
 
     console.log('Tables fetched for restaurant ID:', restaurantIdInt, tables);
-    return NextResponse.json({ tables }, { status: 200 });
+    return NextResponse.json({ categories }, { status: 200 });
   } catch (error) {
     console.error('Error fetching Categories:', error);
     if (error.name === 'PrismaClientInitializationError') {

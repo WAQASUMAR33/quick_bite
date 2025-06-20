@@ -28,7 +28,7 @@ export default function RestaurantLoginPage() {
       await login(formData.email, formData.password, 'restaurant');
       setSuccess('Login successful!');
       setFormData({ email: '', password: '' });
-      setTimeout(() => router.push('/restuarent/dashboard'), 2000); // Redirect after 2s
+      setTimeout(() => router.push('/restuarent/dashboard'), 500); // Redirect after 2s
     } catch (err) {
       setError(err.message);
     }
@@ -97,7 +97,7 @@ export default function RestaurantLoginPage() {
           </form>
           <p className="mt-4 text-center">
             If you dont have an account,{' '}
-            <Link href="http://localhost:3000/restuarent_signup" className="text-blue-600 hover:underline">
+            <Link href="/restuarent_signup" className="text-blue-600 hover:underline">
               signup
             </Link>
           </p>

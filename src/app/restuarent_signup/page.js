@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -11,9 +11,9 @@ import {
   PhoneIcon,
   MapIcon,
   TagIcon,
-  UsersIcon,
   ChatBubbleLeftIcon,
 } from '@heroicons/react/24/outline';
+import { Loader } from '@googlemaps/js-api-loader';
 
 export default function CreateRestaurantPage() {
   const [formData, setFormData] = useState({
@@ -24,14 +24,74 @@ export default function CreateRestaurantPage() {
     phone: '',
     description: '',
     city: '',
-    cuisine: '',
-    capacity: '',
+    cousine: '',
     logo: null,
     bgImage: null,
+    latitude: '',
+    longitude: '',
+    ranking: '',
   });
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const router = useRouter();
+  const mapRef = useRef(null);
+  const markerRef = useRef(null);
+  const mapInstanceRef = useRef(null);
+
+  // Initialize Google Maps
+  useEffect(() => {
+    const loader = new Loader({
+      apiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '',
+      version: 'weekly',
+      libraries: ['places'],
+    });
+
+    loader.load().then(() => {
+      if (mapRef.current && !mapInstanceRef.current) {
+        const defaultLocation = { lat: 40.7128, lng: -74.0060 };
+        mapInstanceRef.current = new google.maps.Map(mapRef.current, {
+          center: defaultLocation,
+          zoom: 12,
+          mapTypeControl: false,
+          streetViewControl: false,
+        });
+
+        markerRef.current = new google.maps.Marker({
+          position: defaultLocation,
+          map: mapInstanceRef.current,
+          draggable: true,
+        });
+
+        markerRef.current.addListener('dragend', () => {
+          const position = markerRef.current.getPosition();
+          setFormData((prev) => ({
+            ...prev,
+            latitude: position.lat().toFixed(8),
+            longitude: position.lng().toFixed(8),
+          }));
+        });
+
+        mapInstanceRef.current.addListener('click', (e) => {
+          const position = e.latLng;
+          markerRef.current.setPosition(position);
+          setFormData((prev) => ({
+            ...prev,
+            latitude: position.lat().toFixed(8),
+            longitude: position.lng().toFixed(8),
+          }));
+        });
+
+        setFormData((prev) => ({
+          ...prev,
+          latitude: defaultLocation.lat.toFixed(8),
+          longitude: defaultLocation.lng.toFixed(8),
+        }));
+      }
+    }).catch((err) => {
+      console.error('Failed to load Google Maps:', err);
+      setError('Failed to load map. Please try again.');
+    });
+  }, []);
 
   const convertToBase64 = (file) => {
     return new Promise((resolve, reject) => {
@@ -48,14 +108,20 @@ export default function CreateRestaurantPage() {
       if (!uploadApiUrl) {
         throw new Error('Image upload API URL is not defined');
       }
+      console.log('Uploading image to:', uploadApiUrl);
       const response = await fetch(uploadApiUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ image: base64Image }),
       });
-      const data = await response.json();
-      if (!response.ok || !data.image_url) {
-        throw new Error(data.error || 'Failed to upload image');
+      const text = await response.text();
+      if (!response.ok) {
+        console.error('Image upload raw response:', text);
+        throw new Error(`Image upload failed: HTTP ${response.status}`);
+      }
+      const data = JSON.parse(text);
+      if (!data.image_url) {
+        throw new Error('No image URL returned from server');
       }
       const fullPath = `${process.env.NEXT_PUBLIC_IMAGE_UPLOAD_PATH}/${data.image_url}`;
       if (!/^https?:\/\/.+/.test(fullPath)) {
@@ -63,6 +129,7 @@ export default function CreateRestaurantPage() {
       }
       return fullPath;
     } catch (error) {
+      console.error('Image upload error:', error);
       throw error;
     }
   };
@@ -82,18 +149,25 @@ export default function CreateRestaurantPage() {
     setSuccess('');
 
     try {
-      // Validate required fields
-      const { name, email, password, city, address } = formData;
-      if (!name || !email || !password || !city || !address) {
-        throw new Error('Please fill in all required fields: name, email, password, city, and address');
+      const { name, email, password, city, address, latitude, longitude } = formData;
+      if (!name || !email || !password || !city || !address || !latitude || !longitude) {
+        throw new Error('Please fill in all required fields: name, email, password, city, address, latitude, and longitude');
       }
 
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
         throw new Error('Please enter a valid email address');
       }
 
-      if (formData.capacity && (isNaN(formData.capacity) || parseInt(formData.capacity) <= 0)) {
-        throw new Error('Capacity must be a positive number');
+      if (formData.ranking && (isNaN(formData.ranking) || parseFloat(formData.ranking) < 0 || parseFloat(formData.ranking) > 5)) {
+        throw new Error('Ranking must be a number between 0.0 and 5.0');
+      }
+
+      if (isNaN(parseFloat(latitude)) || parseFloat(latitude) < -90 || parseFloat(latitude) > 90) {
+        throw new Error('Latitude must be a number between -90 and 90');
+      }
+
+      if (isNaN(parseFloat(longitude)) || parseFloat(longitude) < -180 || parseFloat(longitude) > 180) {
+        throw new Error('Longitude must be a number between -180 and 180');
       }
 
       if (formData.logo && formData.logo instanceof File) {
@@ -116,8 +190,10 @@ export default function CreateRestaurantPage() {
         phone: formData.phone || '',
         description: formData.description || '',
         city,
-        cuisine: formData.cuisine || '',
-        capacity: formData.capacity ? parseInt(formData.capacity) : undefined,
+        cousine: formData.cousine || '',
+        latitude: parseFloat(latitude),
+        longitude: parseFloat(longitude),
+        ranking: formData.ranking ? parseFloat(formData.ranking) : undefined,
         logo: '',
         bgImage: '',
       };
@@ -134,38 +210,50 @@ export default function CreateRestaurantPage() {
         dataToSend.bgImage = bgImageUrl;
       }
 
-      console.log('Payload:', dataToSend);
+      // Log the payload and request details for debugging
+      console.log('Submitting payload to /api/restaurant:', {
+        url: '/api/restaurant',
+        payload: dataToSend,
+      });
 
       const response = await fetch('/api/restuarent', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(dataToSend),
       });
 
-      const data = await response.json();
-      if (response.ok) {
-        setSuccess('Restaurant created successfully!');
-        setFormData({
-          name: '',
-          email: '',
-          password: '',
-          address: '',
-          phone: '',
-          description: '',
-          city: '',
-          cuisine: '',
-          capacity: '',
-          logo: null,
-          bgImage: null,
-        });
-        setTimeout(() => router.push('/restaurant-login'), 2000);
-      } else {
-        throw new Error(data.error || 'Failed to create restaurant');
+      const text = await response.text();
+      console.log('API response:', {
+        status: response.status,
+        statusText: response.statusText,
+        body: text,
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${text}`);
       }
+
+      const data = JSON.parse(text);
+      setSuccess('Restaurant created successfully!');
+      setFormData({
+        name: '',
+        email: '',
+        password: '',
+        address: '',
+        phone: '',
+        description: '',
+        city: '',
+        cousine: '',
+        logo: null,
+        bgImage: null,
+        latitude: '',
+        longitude: '',
+        ranking: '',
+      });
+      setTimeout(() => router.push('/restuarent_login'), 2000);
     } catch (err) {
       setError(err.message);
+      console.error('Submission error:', err);
     }
   };
 
@@ -298,39 +386,87 @@ export default function CreateRestaurantPage() {
               </div>
             </div>
             <div className="mb-2 relative">
-              <label htmlFor="cuisine" className="block text-gray-700 mb-2">
-                Cuisine
+              <label htmlFor="cousine" className="block text-gray-700 mb-2">
+                Cousine
               </label>
               <div className="relative">
                 <TagIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
                 <input
                   type="text"
-                  id="cuisine"
-                  name="cuisine"
-                  value={formData.cuisine}
+                  id="cousine"
+                  name="cousine"
+                  value={formData.cousine}
                   onChange={handleChange}
-                  placeholder="Enter cuisine type"
+                  placeholder="Enter cousine type"
                   className="w-full p-3 pl-10 border rounded focus:outline-none focus:ring-2 focus:ring-green-600"
                 />
               </div>
             </div>
             <div className="mb-2 relative">
-              <label htmlFor="capacity" className="block text-gray-700 mb-2">
-                Capacity
+              <label htmlFor="ranking" className="block text-gray-700 mb-2">
+                Ranking
               </label>
               <div className="relative">
-                <UsersIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                <TagIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
                 <input
                   type="number"
-                  id="capacity"
-                  name="capacity"
-                  value={formData.capacity}
+                  id="ranking"
+                  name="ranking"
+                  value={formData.ranking}
                   onChange={handleChange}
-                  placeholder="Enter capacity"
+                  placeholder="Enter ranking (0.0 to 5.0)"
                   className="w-full p-3 pl-10 border rounded focus:outline-none focus:ring-2 focus:ring-green-600"
-                  min="1"
+                  step="0.1"
+                  min="0"
+                  max="5"
                 />
               </div>
+            </div>
+            <div className="mb-2 relative">
+              <label htmlFor="latitude" className="block text-gray-700 mb-2">
+                Latitude
+              </label>
+              <div className="relative">
+                <MapPinIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                <input
+                  type="text"
+                  id="latitude"
+                  name="latitude"
+                  value={formData.latitude}
+                  onChange={handleChange}
+                  placeholder="Select location on map"
+                  className="w-full p-3 pl-10 border rounded focus:outline-none focus:ring-2 focus:ring-green-600"
+                  required
+                  readOnly
+                />
+              </div>
+            </div>
+            <div className="mb-2 relative">
+              <label htmlFor="longitude" className="block text-gray-700 mb-2">
+                Longitude
+              </label>
+              <div className="relative">
+                <MapPinIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                <input
+                  type="text"
+                  id="longitude"
+                  name="longitude"
+                  value={formData.longitude}
+                  onChange={handleChange}
+                  placeholder="Select location on map"
+                  className="w-full p-3 pl-10 border rounded focus:outline-none focus:ring-2 focus:ring-green-600"
+                  required
+                  readOnly
+                />
+              </div>
+            </div>
+            <div className="mb-2 md:col-span-2">
+              <label className="block text-gray-700 mb-2">Select Location</label>
+              <div
+                ref={mapRef}
+                className="w-full h-64 border rounded"
+              ></div>
+              <p className="text-sm text-gray-500 mt-2">Click on the map or drag the marker to select the restaurant location.</p>
             </div>
             <div className="mb-2">
               <label htmlFor="logo" className="block text-gray-700 mb-2">
@@ -387,7 +523,7 @@ export default function CreateRestaurantPage() {
           </form>
           <p className="mt-4 text-center">
             If you have already account!{' '}
-            <Link href="/restaurant-login" className="text-blue-600 hover:underline">
+            <Link href="/restuarent_login" className="text-blue-600 hover:underline">
               Login
             </Link>
           </p>

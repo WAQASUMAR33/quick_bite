@@ -14,7 +14,7 @@ model User {
   name      String
   phone     String?
   city      String
-  address   String
+  address   String  
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   bookings  Booking[]
@@ -32,11 +32,16 @@ model Restaurant {
   name          String
   email         String       @unique
   password      String
+  city          String?      @default("")
   address       String
   phone         String
-  description   String?
-  logo          String?
-  bgImage       String?
+  cousine       String?      @default("")
+  description   String?      @default("")
+  logo          String?      @default("")
+  bgImage       String?      @default("")
+  latitude      Decimal      @db.Decimal(10, 8)
+  longitude     Decimal      @db.Decimal(11, 8)
+  ranking       Float?       @default(0.0)
   status        RestaurantStatus @default(DE_ACTIVE)
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
@@ -84,7 +89,7 @@ model Category {
   restaurantId  Int
   restaurant    Restaurant   @relation(fields: [restaurantId], references: [id])
   name          String
-  imgurl          String
+  imgurl        String       @default("") // Default to empty string
   dishes        Dish[]
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
@@ -94,9 +99,10 @@ model Dish {
   id            Int          @id @default(autoincrement())
   categoryId    Int
   category      Category     @relation(fields: [categoryId], references: [id])
-  name          String
-  description   String?
-  price         Float
+  name  String
+  imgurl        String       @default("")
+  description   String?      @default("")
+  price         Float        @default(0.0)
   available     Boolean      @default(true)
   orderItems    OrderItem[]
   createdAt     DateTime     @default(now())
