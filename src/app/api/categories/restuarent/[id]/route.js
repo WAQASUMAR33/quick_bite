@@ -9,33 +9,12 @@ export async function GET(request, { params }) {
     // Validate ID
     if (!id || isNaN(parseInt(id))) {
       return NextResponse.json(
-        {
-          message: 'Invalid restaurant ID',
-          status: false,
-          error: 'Restaurant ID must be a valid number',
-        },
+        { error: 'Restaurant ID must be a valid number' },
         { status: 400 }
       );
     }
 
     const restaurantId = parseInt(id);
-
-    // Optionally validate restaurant existence (uncomment if needed)
-    /*
-    const restaurant = await prisma.restaurant.findUnique({
-      where: { id: restaurantId },
-    });
-    if (!restaurant) {
-      return NextResponse.json(
-        {
-          message: 'Restaurant not found',
-          status: false,
-          error: 'Restaurant not found for the provided ID',
-        },
-        { status: 404 }
-      );
-    }
-    */
 
     // Fetch categories
     const categories = await prisma.category.findMany({
@@ -49,22 +28,13 @@ export async function GET(request, { params }) {
       },
     });
 
-    return NextResponse.json(
-      {
-        categories
-      },
-      { status: 200 }
-    );
+    return NextResponse.json(categories, { status: 200 });
   } catch (error) {
     console.error('Error in GET /api/categories/[id]:', {
       message: error.message,
     });
     return NextResponse.json(
-      {
-        message: 'Internal server error',
-        status: false,
-        error: 'An unexpected error occurred',
-      },
+      { error: 'An unexpected error occurred' },
       { status: 500 }
     );
   }
