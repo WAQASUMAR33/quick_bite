@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import prisma from '../../../../../utils/prisma';
 
-// GET /api/categories/[id]
+// GET /api/dishes/[id]
 export async function GET(request, { params }) {
   try {
     const { id } = params;
@@ -16,7 +16,7 @@ export async function GET(request, { params }) {
 
     const restaurantId = parseInt(id);
 
-    // Fetch categories
+    // Fetch categories with their dishes
     const categories = await prisma.category.findMany({
       where: { restaurantId },
       select: {
@@ -25,12 +25,24 @@ export async function GET(request, { params }) {
         name: true,
         createdAt: true,
         updatedAt: true,
+        dishes: {
+          select: {
+            id: true,
+            name: true,
+            imgurl: true,
+            description: true,
+            price: true,
+            available: true,
+            createdAt: true,
+            updatedAt: true,
+          },
+        },
       },
     });
 
     return NextResponse.json(categories, { status: 200 });
   } catch (error) {
-    console.error('Error in GET /api/categories/[id]:', {
+    console.error('Error in GET /api/dishes/[id]:', {
       message: error.message,
     });
     return NextResponse.json(
