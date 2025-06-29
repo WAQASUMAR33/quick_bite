@@ -51,9 +51,7 @@ export async function GET(request, { params }) {
 
     return NextResponse.json(
       {
-        message: 'Categories fetched successfully',
-        status: true,
-        data: categories,
+        categories
       },
       { status: 200 }
     );
