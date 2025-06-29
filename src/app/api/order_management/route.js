@@ -61,3 +61,80 @@ export async function GET(request) {
     );
   }
 }
+
+
+
+export async function POST(request) {
+  const body = await request.json();
+
+  const {
+    userId,
+    restaurantId,
+    orderItems,
+    totalAmount,
+    order_date,
+    order_time,
+    contact_info,
+    order_type,
+    table_no,
+    trnx_id,
+    trnx_receipt,
+  } = body;
+
+  // Validate required fields
+  const requiredFields = [userId, restaurantId, orderItems, totalAmount, order_type];
+  if (requiredFields.some(field => !field)) {
+    return new Response(JSON.stringify({
+      status: 'error',
+      message: 'Missing required fields: userId, restaurantId, orderItems, totalAmount, or order_type',
+    }), { status: 400 });
+  }
+
+  try {
+    // Create the order
+    const newOrder = await prisma.order.create({
+      data: {
+        userId: parseInt(userId),
+        restaurantId: parseInt(restaurantId),
+        totalAmount: parseFloat(totalAmount),
+        order_date,
+        order_time,
+        contact_info,
+        order_type,
+        table_no,
+        trnx_id,
+        trnx_receipt,
+        status: 'PENDING',
+      },
+    });
+
+    // Prepare and create order items
+    const orderItemData = orderItems.map(item => ({
+      orderId: newOrder.id,
+      dishId: parseInt(item.dishId),
+      unit_rate: parseFloat(item.unit_rate),
+      quantity: parseInt(item.quantity),
+      price: parseFloat(item.price),
+    }));
+
+    await prisma.orderItem.createMany({
+      data: orderItemData,
+    });
+
+    // Success response
+    return new Response(JSON.stringify({
+      status: 'success',
+      message: 'Order created successfully',
+      data: { orderId: newOrder.id },
+    }), { status: 201 });
+  } catch (error) {
+    console.error('Order creation failed:', error.message);
+    return new Response(JSON.stringify({
+      status: 'error',
+      message: 'Failed to create order',
+      error: error.message,
+    }), { status: 500 });
+  } finally {
+    await prisma.$disconnect();
+  }
+}
