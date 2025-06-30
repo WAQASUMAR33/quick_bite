@@ -497,8 +497,7 @@ export default function MenuManagementPage() {
                   <button
                     type="button"
                     onClick={handleModalClose}
-                    className="mr-4 text-gray-600 hover:text-gray-800 font-medium"
-                  >
+                    className="mr-4 text-gray-600 hover:text-gray-800 font-medium">
                     Cancel
                   </button>
                   <button
