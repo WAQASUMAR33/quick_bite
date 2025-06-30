@@ -5,7 +5,7 @@ import prisma from '../../../utils/prisma';
 export async function POST(request) {
   try {
     const body = await request.json();
-    const { categoryId, name, description, price, available } = body;
+    const { categoryId, name, description, price, available, imgurl } = body;
 
     // Validate required fields
     if (!categoryId || !name || !price) {
@@ -18,6 +18,14 @@ export async function POST(request) {
     if (isNaN(priceNum) || priceNum <= 0) {
       return NextResponse.json(
         { error: 'Price must be a positive number' },
+        { status: 400 }
+      );
+    }
+
+    // Validate imgurl (optional, must be a valid URL if provided)
+    if (imgurl && !/^https?:\/\/.+/.test(imgurl)) {
+      return NextResponse.json(
+        { error: 'imgurl must be a valid URL' },
         { status: 400 }
       );
     }
@@ -50,6 +58,7 @@ export async function POST(request) {
         description: description || null,
         price: priceNum,
         available: available !== undefined ? available : true,
+        imgurl: imgurl || '',
       },
       select: {
         id: true,
@@ -58,6 +67,7 @@ export async function POST(request) {
         description: true,
         price: true,
         available: true,
+        imgurl: true,
         createdAt: true,
         updatedAt: true,
         category: { select: { name: true } },
@@ -118,6 +128,7 @@ export async function GET(request) {
         description: true,
         price: true,
         available: true,
+        imgurl: true,
         createdAt: true,
         updatedAt: true,
         category: { select: { name: true } },

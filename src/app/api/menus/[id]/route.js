@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import prisma from '@/utils/prisma';
+import prisma from '../../../../utils/prisma';
 
 // PUT /api/dishes/[id]
 export async function PUT(request, { params }) {
@@ -7,7 +7,7 @@ export async function PUT(request, { params }) {
 
   try {
     const body = await request.json();
-    const { categoryId, name, description, price, available } = body;
+    const { categoryId, name, description, price, available, imgurl } = body;
 
     // Validate required fields
     if (!categoryId || !name || !price) {
@@ -24,10 +24,18 @@ export async function PUT(request, { params }) {
       );
     }
 
+    // Validate imgurl (optional, must be a valid URL if provided)
+    if (imgurl && !/^https?:\/\/.+/.test(imgurl)) {
+      return NextResponse.json(
+        { error: 'imgurl must be a valid URL' },
+        { status: 400 }
+      );
+    }
+
     // Check if dish exists
     const existingDish = await prisma.dish.findUnique({
       where: { id: parseInt(id) },
-      select: { id: true, category: { select: { restaurantId: true } } },
+      select: { id: true, category: { select: { restaurantId: true } }, imgurl: true },
     });
     if (!existingDish) {
       return NextResponse.json({ error: 'Dish not found' }, { status: 404 });
@@ -71,7 +79,8 @@ export async function PUT(request, { params }) {
         name,
         description: description || null,
         price: priceNum,
-        available,
+        available: available !== undefined ? available : true,
+        imgurl: imgurl !== undefined ? imgurl : existingDish.imgurl,
       },
       select: {
         id: true,
@@ -80,6 +89,7 @@ export async function PUT(request, { params }) {
         description: true,
         price: true,
         available: true,
+        imgurl: true,
         createdAt: true,
         updatedAt: true,
         category: { select: { name: true } },
@@ -95,7 +105,10 @@ export async function PUT(request, { params }) {
       { status: 200 }
     );
   } catch (error) {
-    console.error('Error updating dish:', error);
+    console.error('Error updating dish:', {
+      message: error.message,
+      stack: error.stack,
+    });
     return NextResponse.json(
       { error: `Internal server error: ${error.message}` },
       { status: 500 }

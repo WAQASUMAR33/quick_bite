@@ -3,6 +3,47 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../../lib/authContext';
 import { PlusIcon, PencilIcon, TrashIcon, XMarkIcon } from '@heroicons/react/24/outline';
 
+const convertToBase64 = (file) => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = (error) => reject(error);
+  });
+};
+
+const uploadImageToServer = async (base64Image) => {
+  try {
+    const uploadApiUrl = process.env.NEXT_PUBLIC_IMAGE_UPLOAD_API;
+    if (!uploadApiUrl) {
+      throw new Error('Image upload API URL is not defined');
+    }
+    console.log('Uploading image to:', uploadApiUrl);
+    const response = await fetch(uploadApiUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ image: base64Image }),
+    });
+    const text = await response.text();
+    if (!response.ok) {
+      console.error('Image upload raw response:', text);
+      throw new Error(`Image upload failed: HTTP ${response.status}`);
+    }
+    const data = JSON.parse(text);
+    if (!data.image_url) {
+      throw new Error('No image URL returned from server');
+    }
+    const fullPath = `${process.env.NEXT_PUBLIC_IMAGE_UPLOAD_PATH}/${data.image_url}`;
+    if (!/^https?:\/\/.+/.test(fullPath)) {
+      throw new Error('Invalid image URL returned from server');
+    }
+    return fullPath;
+  } catch (error) {
+    console.error('Image upload error:', error);
+    throw error;
+  }
+};
+
 export default function MenuManagementPage() {
   const { restaurant } = useAuth();
   const [dishes, setDishes] = useState([]);
@@ -17,7 +58,10 @@ export default function MenuManagementPage() {
     description: '',
     price: '',
     available: true,
+    imgurl: '',
   });
+  const [imageFile, setImageFile] = useState(null);
+  const [imagePreview, setImagePreview] = useState('');
   const [error, setError] = useState('');
 
   // Fetch dishes and categories on mount
@@ -91,7 +135,9 @@ export default function MenuManagementPage() {
         description: dish.description || '',
         price: dish.price.toString(),
         available: dish.available,
+        imgurl: dish.imgurl || '',
       });
+      setImagePreview(dish.imgurl || '');
     } else {
       setFormData({
         categoryId: categories.length > 0 ? categories[0].id.toString() : '',
@@ -99,8 +145,11 @@ export default function MenuManagementPage() {
         description: '',
         price: '',
         available: true,
+        imgurl: '',
       });
+      setImagePreview('');
     }
+    setImageFile(null);
     setError('');
     setModalOpen(true);
   };
@@ -108,6 +157,8 @@ export default function MenuManagementPage() {
   const handleModalClose = () => {
     setModalOpen(false);
     setSelectedDish(null);
+    setImageFile(null);
+    setImagePreview('');
     setError('');
   };
 
@@ -117,6 +168,20 @@ export default function MenuManagementPage() {
       ...formData,
       [name]: type === 'checkbox' ? checked : value,
     });
+  };
+
+  const handleImageChange = async (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      try {
+        setImageFile(file);
+        const base64 = await convertToBase64(file);
+        setImagePreview(base64);
+        setFormData({ ...formData, imgurl: '' }); // Reset imgurl until upload
+      } catch (error) {
+        setError('Failed to process image');
+      }
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -137,6 +202,14 @@ export default function MenuManagementPage() {
     }
 
     try {
+      let imgurl = formData.imgurl;
+
+      // Upload image if a file is selected
+      if (imageFile) {
+        const base64Image = await convertToBase64(imageFile);
+        imgurl = await uploadImageToServer(base64Image);
+      }
+
       let response;
 
       if (modalMode === 'add') {
@@ -146,6 +219,7 @@ export default function MenuManagementPage() {
           description: description || null,
           price: parseFloat(price),
           available,
+          imgurl: imgurl || '',
         };
         response = await fetch('/api/menus', {
           method: 'POST',
@@ -161,6 +235,7 @@ export default function MenuManagementPage() {
           description: description || null,
           price: parseFloat(price),
           available,
+          imgurl: imgurl || selectedDish.imgurl || '',
         };
         response = await fetch(`/api/menus/${selectedDish.id}`, {
           method: 'PUT',
@@ -181,11 +256,7 @@ export default function MenuManagementPage() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || `HTTP ${response.status}: Operation failed`);
 
-      // Handle response (POST/PUT return data, DELETE returns {})
-      const result = data.data || data;
-      console.log('handleSubmit: Response data=', result);
-
-      await fetchDishes(); // Refresh dish list
+      await fetchDishes();
       handleModalClose();
     } catch (err) {
       setError(`Operation failed: ${err.message}`);
@@ -230,6 +301,7 @@ export default function MenuManagementPage() {
             <thead>
               <tr className="bg-gray-200 text-gray-600 uppercase text-sm">
                 <th className="py-3 px-6 text-left">Name</th>
+                <th className="py-3 px-6 text-left">Image</th>
                 <th className="py-3 px-6 text-left">Category</th>
                 <th className="py-3 px-6 text-left">Price</th>
                 <th className="py-3 px-6 text-left">Available</th>
@@ -241,6 +313,13 @@ export default function MenuManagementPage() {
               {dishes.map((dish) => (
                 <tr key={dish.id} className="border-b hover:bg-gray-50">
                   <td className="py-3 px-6">{dish.name}</td>
+                  <td className="py-3 px-6">
+                    {dish.imgurl ? (
+                      <img src={dish.imgurl} alt={dish.name} className="h-10 w-10 object-cover rounded" />
+                    ) : (
+                      'No image'
+                    )}
+                  </td>
                   <td className="py-3 px-6">{dish.category?.name || 'N/A'}</td>
                   <td className="py-3 px-6">{dish.price.toFixed(2)}</td>
                   <td className="py-3 px-6">
@@ -327,7 +406,7 @@ export default function MenuManagementPage() {
                   />
                 </div>
                 <div className="mb-4">
-                  <label htmlFor="description" className="block text-gray-700 font-medium mb-2">
+                  <label htmlFor="description" className=" seeker-gray-700 font-medium mb-2">
                     Description
                   </label>
                   <textarea
@@ -354,6 +433,29 @@ export default function MenuManagementPage() {
                     min="0.01"
                     step="0.01"
                   />
+                </div>
+                <div className="mb-4">
+                  <label htmlFor="image" className="block text-gray-700 font-medium mb-2">
+                    Dish Image
+                  </label>
+                  <input
+                    type="file"
+                    id="image"
+                    name="image"
+                    accept="image/*"
+                    onChange={handleImageChange}
+                    className="w-full p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-600"
+                  />
+                  {(imagePreview || formData.imgurl) && (
+                    <div className="mt-2">
+                      <p className="text-gray-600">Image Preview:</p>
+                      <img
+                        src={imagePreview || formData.imgurl}
+                        alt="Dish preview"
+                        className="h-20 w-20 object-cover rounded"
+                      />
+                    </div>
+                  )}
                 </div>
                 <div className="mb-4">
                   <label htmlFor="available" className="flex items-center">
