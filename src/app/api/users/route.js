@@ -79,7 +79,7 @@ export async function POST(request) {
       },
     });
 
-    return NextResponse.json({ user }, { status: 201 });
+    return NextResponse.json({ user ,status:"success"}, { status: 201 });
   } catch (error) {
     console.error('Error signing up user:', error);
     if (error.code === 'P2002') {
