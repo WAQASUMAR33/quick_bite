@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import prisma from '@/utils/prisma';
+import prisma from '../../../../utils/prisma';
 
 // PUT /api/categories/[id]
 export async function PUT(request, { params }) {
@@ -7,7 +7,7 @@ export async function PUT(request, { params }) {
 
   try {
     const body = await request.json();
-    const { restaurantId, name } = body;
+    const { restaurantId, name, imgurl } = body;
 
     // Validate required fields
     if (!restaurantId) {
@@ -19,6 +19,14 @@ export async function PUT(request, { params }) {
     if (!name) {
       return NextResponse.json(
         { error: 'Category name is required' },
+        { status: 400 }
+      );
+    }
+
+    // Validate imgurl (optional, must be a valid URL if provided)
+    if (imgurl && !/^https?:\/\/.+/.test(imgurl)) {
+      return NextResponse.json(
+        { error: 'imgurl must be a valid URL' },
         { status: 400 }
       );
     }
@@ -63,11 +71,15 @@ export async function PUT(request, { params }) {
     // Update category
     const updatedCategory = await prisma.category.update({
       where: { id: parseInt(id) },
-      data: { name },
+      data: {
+        name,
+        imgurl: imgurl !== undefined ? imgurl : existingCategory.imgurl, // Preserve existing imgurl if not provided
+      },
       select: {
         id: true,
         restaurantId: true,
         name: true,
+        imgurl: true, // Include imgurl in response
         createdAt: true,
         updatedAt: true,
       },
@@ -82,7 +94,10 @@ export async function PUT(request, { params }) {
       { status: 200 }
     );
   } catch (error) {
-    console.error('Error updating category:', error);
+    console.error('Error updating category:', {
+      message: error.message,
+      stack: error.stack,
+    });
     return NextResponse.json(
       { error: `Internal server error: ${error.message}` },
       { status: 500 }

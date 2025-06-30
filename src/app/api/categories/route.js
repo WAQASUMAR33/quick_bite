@@ -5,12 +5,20 @@ import prisma from '../../../utils/prisma';
 export async function POST(request) {
   try {
     const body = await request.json();
-    const { restaurantId, name } = body;
+    const { restaurantId, name, imgurl } = body;
 
     // Validate required fields
     if (!restaurantId || !name) {
       return NextResponse.json(
         { error: 'restaurantId and name are required' },
+        { status: 400 }
+      );
+    }
+
+    // Validate imgurl (optional, must be a valid URL if provided)
+    if (imgurl && !/^https?:\/\/.+/.test(imgurl)) {
+      return NextResponse.json(
+        { error: 'imgurl must be a valid URL' },
         { status: 400 }
       );
     }
@@ -39,11 +47,13 @@ export async function POST(request) {
       data: {
         restaurantId: parseInt(restaurantId),
         name,
+        imgurl: imgurl || '', // Use provided imgurl or default to empty string
       },
       select: {
         id: true,
         restaurantId: true,
         name: true,
+        imgurl: true, // Include imgurl in response
         createdAt: true,
         updatedAt: true,
       },
@@ -100,6 +110,7 @@ export async function GET(request) {
         id: true,
         restaurantId: true,
         name: true,
+        imgurl: true, // Include imgurl in response
         createdAt: true,
         updatedAt: true,
       },
