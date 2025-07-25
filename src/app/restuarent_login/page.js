@@ -45,12 +45,12 @@ export default function RestaurantLoginPage() {
         />
       </div>
       {/* Right Side: Form */}
-      <div className="w-full md:w-1/2 flex items-center justify-center bg-gray-100 p-8">
-        <div className="max-w-md w-full bg-white p-8 rounded-lg shadow-lg">
+      <div className="w-full md:w-1/2 flex items-center justify-center bg-gray-100 px-8 py-2">
+        <div className="max-w-md w-full bg-white px-8 py-4 rounded-lg shadow-lg">
           <img
             src="/quickbite.png"
             alt="QuickBite Logo"
-            className="w-48 h-48 mx-auto mb-6"
+            className="w-38 h-38 mx-auto mb-6"
              
           />
           <h1 className="text-2xl font-bold mb-6 text-gray-800 text-center">Restaurant Login</h1>

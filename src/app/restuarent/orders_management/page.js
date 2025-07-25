@@ -1,11 +1,37 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { useAuth } from '../../lib/authContext';
-import { EyeIcon, XMarkIcon } from '@heroicons/react/24/outline';
+import {
+  Box,
+  Typography,
+  Button,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  TablePagination,
+  TextField,
+  Select,
+  MenuItem,
+  FormControl,
+  InputLabel,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Alert,
+  Paper,
+  IconButton,
+  CircularProgress,
+} from '@mui/material';
+import { Visibility as EyeIcon, Close as CloseIcon } from '@mui/icons-material';
 
 export default function OrderManagementPage() {
-  const { restaurant } = useAuth();
+  const { restaurant, token } = useAuth();
   const [orders, setOrders] = useState([]);
+  const [filteredOrders, setFilteredOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState(null);
@@ -13,12 +39,17 @@ export default function OrderManagementPage() {
     status: 'PENDING',
   });
   const [error, setError] = useState('');
+  // Pagination states
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(5);
+  // Filter states
+  const [filterOrderId, setFilterOrderId] = useState('');
+  const [filterStatus, setFilterStatus] = useState('');
+  const [filterOrderType, setFilterOrderType] = useState('');
 
   // Fetch orders on mount
   useEffect(() => {
-    console.log('OrderManagementPage useEffect: restaurant=', restaurant);
     if (!restaurant || !restaurant.id) {
-      console.log('OrderManagementPage: No restaurant or restaurant.id, setting loading=false');
       setError('Please log in as a restaurant to view orders');
       setLoading(false);
       return;
@@ -26,27 +57,35 @@ export default function OrderManagementPage() {
     fetchOrders();
   }, [restaurant]);
 
-  const fetchOrders = async () => {
-    console.log('fetchOrders: Starting fetch');
-    try {
-      console.log('Fetching orders for restaurant ID:', restaurant.id);
-      const response = await fetch(`/api/order_management/${restaurant.id}`);
-      console.log('fetchOrders: Response status=', response.status);
-      const data = await response.json();
-      console.log('fetchOrders: Response data=', data);
+  // Apply filters
+  useEffect(() => {
+    const filtered = orders.filter((order) => {
+      const matchesOrderId = filterOrderId ? String(order.id).includes(filterOrderId) : true;
+      const matchesStatus = filterStatus ? order.status === filterStatus : true;
+      const matchesOrderType = filterOrderType ? order.order_type === filterOrderType : true;
+      return matchesOrderId && matchesStatus && matchesOrderType;
+    });
+    setFilteredOrders(filtered);
+    setPage(0);
+  }, [orders, filterOrderId, filterStatus, filterOrderType]);
 
+  const fetchOrders = async () => {
+    try {
+      const response = await fetch(`/api/order_management/${restaurant.id}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      const data = await response.json();
       if (!response.ok) {
         throw new Error(data.error || `HTTP ${response.status}: Failed to fetch orders`);
       }
       if (!Array.isArray(data.data)) {
         throw new Error('Expected orders data to be an array');
       }
-
       setOrders(data.data);
       setLoading(false);
-      console.log('fetchOrders: Success, orders=', data.data);
     } catch (err) {
-      console.error('fetchOrders: Error=', err.message, err.stack);
       setError(`Failed to load orders: ${err.message}`);
       setLoading(false);
     }
@@ -86,14 +125,12 @@ export default function OrderManagementPage() {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({ status }),
       });
-
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || `HTTP ${response.status}: Operation failed`);
-
-      console.log('handleSubmit: Response data=', data.data);
 
       await fetchOrders();
       handleModalClose();
@@ -102,218 +139,366 @@ export default function OrderManagementPage() {
     }
   };
 
+  // Pagination handlers
+  const handleChangePage = (event, newPage) => {
+    setPage(newPage);
+  };
+
+  const handleChangeRowsPerPage = (event) => {
+    setRowsPerPage(parseInt(event.target.value, 10));
+    setPage(0);
+  };
+
+  // Filter handlers
+  const handleFilterOrderIdChange = (e) => {
+    setFilterOrderId(e.target.value);
+  };
+
+  const handleFilterStatusChange = (e) => {
+    setFilterStatus(e.target.value);
+  };
+
+  const handleFilterOrderTypeChange = (e) => {
+    setFilterOrderType(e.target.value);
+  };
+
   if (!restaurant || !restaurant.id) {
-    return <div className="p-6 text-red-500">Please log in as a restaurant to view orders.</div>;
+    return (
+      <Box sx={{ p: 3 }}>
+        <Alert severity="error">Please log in as a restaurant to view orders.</Alert>
+      </Box>
+    );
   }
 
   return (
-    <div className="p-6 bg-gray-50 min-h-screen">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold text-gray-800">Order Management</h1>
-      </div>
+    <Box sx={{ p: 3, bgcolor: '#f5f5f5', minHeight: '100vh' }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+        <Typography variant="h5" sx={{ fontWeight: 'bold', color: '#1a3c34' }}>
+          Order Management
+        </Typography>
+      </Box>
+
+      {/* Filters */}
+      <Box sx={{ mb: 3, display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+        <TextField
+          label="Filter by Order ID"
+          value={filterOrderId}
+          onChange={handleFilterOrderIdChange}
+          variant="outlined"
+          size="small"
+          sx={{ minWidth: 200 }}
+        />
+        <FormControl sx={{ minWidth: 200 }} size="small">
+          <InputLabel>Filter by Status</InputLabel>
+          <Select
+            value={filterStatus}
+            onChange={handleFilterStatusChange}
+            label="Filter by Status"
+          >
+            <MenuItem value="">All</MenuItem>
+            <MenuItem value="PENDING">Pending</MenuItem>
+            <MenuItem value="CONFIRMED">Confirmed</MenuItem>
+            <MenuItem value="CANCELLED">Cancelled</MenuItem>
+            <MenuItem value="COMPLETED">Completed</MenuItem>
+          </Select>
+        </FormControl>
+        <FormControl sx={{ minWidth: 200 }} size="small">
+          <InputLabel>Filter by Order Type</InputLabel>
+          <Select
+            value={filterOrderType}
+            onChange={handleFilterOrderTypeChange}
+            label="Filter by Order Type"
+          >
+            <MenuItem value="">All</MenuItem>
+            <MenuItem value="Dine In">Dine In</MenuItem>
+            <MenuItem value="Take Away">Take Away</MenuItem>
+            <MenuItem value="Delivery">Delivery</MenuItem>
+          </Select>
+        </FormControl>
+      </Box>
 
       {error && (
-        <div className="mb-6 p-4 bg-red-100 text-red-700 rounded-lg flex justify-between items-center">
-          <p>{error}</p>
-          <button
-            onClick={fetchOrders}
-            className="bg-blue-600 hover:bg-blue-700 text-white py-1 px-3 rounded-lg transition duration-200"
+        <Box sx={{ mb: 3 }}>
+          <Alert
+            severity="error"
+            action={
+              <Button color="inherit" size="small" onClick={fetchOrders}>
+                Retry
+              </Button>
+            }
           >
-            Retry
-          </button>
-        </div>
+            {error}
+          </Alert>
+        </Box>
       )}
+
       {loading ? (
-        <p className="text-gray-600">Loading...</p>
-      ) : orders.length === 0 ? (
-        <p className="text-gray-600">No orders found.</p>
+        <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
+          <CircularProgress />
+        </Box>
+      ) : filteredOrders.length === 0 ? (
+        <Typography>No orders found.</Typography>
       ) : (
-        <div className="overflow-x-auto bg-white shadow-md rounded-lg">
-          <table className="min-w-full">
-            <thead>
-              <tr className="bg-gray-200 text-gray-600 uppercase text-sm">
-                <th className="py-3 px-6 text-left">Order ID</th>
-                <th className="py-3 px-6 text-left">User</th>
-                <th className="py-3 px-6 text-left">Order Type</th>
-                <th className="py-3 px-6 text-left">Total </th>
-                <th className="py-3 px-6 text-left">Status</th>
-                <th className="py-3 px-6 text-left">Created At</th>
-                <th className="py-3 px-6 text-center">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {orders.map((order) => (
-                <tr key={order.id} className="border-b hover:bg-gray-50">
-                  <td className="py-3 px-6">{order.id}</td>
-                  <td className="py-3 px-6">{order.user?.email || 'N/A'}</td>
-                  <td className="py-3 px-6">{order.order_type}</td>
-                  <td className="py-3 px-6">{order.totalAmount.toFixed(2)}</td>
-                  <td className="py-3 px-6">
-                    <span
-                      className={`inline-block px-2 py-1 rounded-full text-xs font-semibold ${
-                        order.status === 'PENDING'
-                          ? 'bg-yellow-100 text-yellow-800'
-                          : order.status === 'CONFIRMED'
-                          ? 'bg-green-100 text-green-800'
-                          : order.status === 'CANCELLED'
-                          ? 'bg-red-100 text-red-800'
-                          : 'bg-blue-100 text-blue-800'
-                      }`}
-                    >
-                      {order.status}
-                    </span>
-                  </td>
-                  <td className="py-3 px-6">{new Date(order.createdAt).toLocaleDateString()}</td>
-                  <td className="py-3 px-6 text-center">
-                    <button
-                      onClick={() => handleModalOpen(order)}
-                      className="text-blue-600 hover:text-blue-800"
-                      title="View Details"
-                    >
-                      <EyeIcon className="h-5 w-5" />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <TableContainer component={Paper} sx={{ boxShadow: '0 4px 20px rgba(0, 0, 0, 0.1)', borderRadius: '0px' }}>
+          <Table>
+            <TableHead>
+              <TableRow sx={{ bgcolor: '#1b5e20' }}>
+                <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Order ID</TableCell>
+                <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>User</TableCell>
+                <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Order Type</TableCell>
+                <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Total</TableCell>
+                <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Status</TableCell>
+                <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Created At</TableCell>
+                <TableCell sx={{ color: 'white', fontWeight: 'bold', textAlign: 'center' }}>Actions</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {filteredOrders
+                .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
+                .map((order) => (
+                  <TableRow key={order.id} sx={{ '&:hover': { bgcolor: '#f0f0f0' } }}>
+                    <TableCell>{order.id}</TableCell>
+                    <TableCell>{order.user?.email || 'N/A'}</TableCell>
+                    <TableCell>{order.order_type}</TableCell>
+                    <TableCell>${order.totalAmount.toFixed(2)}</TableCell>
+                    <TableCell>
+                      <span
+                        style={{
+                          padding: '4px 8px',
+                          borderRadius: '12px',
+                          fontSize: '12px',
+                          fontWeight: 'bold',
+                          backgroundColor:
+                            order.status === 'PENDING'
+                              ? '#fff3e0'
+                              : order.status === 'CONFIRMED'
+                              ? '#e6f4ea'
+                              : order.status === 'CANCELLED'
+                              ? '#fdeded'
+                              : '#e3f2fd',
+                          color:
+                            order.status === 'PENDING'
+                              ? '#f57c00'
+                              : order.status === 'CONFIRMED'
+                              ? '#2e7d32'
+                              : order.status === 'CANCELLED'
+                              ? '#d32f2f'
+                              : '#1976d2',
+                        }}
+                      >
+                        {order.status}
+                      </span>
+                    </TableCell>
+                    <TableCell>{new Date(order.createdAt).toLocaleDateString()}</TableCell>
+                    <TableCell sx={{ textAlign: 'center' }}>
+                      <IconButton color="primary" onClick={() => handleModalOpen(order)} title="View Details">
+                        <EyeIcon />
+                      </IconButton>
+                    </TableCell>
+                  </TableRow>
+                ))}
+            </TableBody>
+          </Table>
+          <TablePagination
+            rowsPerPageOptions={[5, 10, 25]}
+            component="div"
+            count={filteredOrders.length}
+            rowsPerPage={rowsPerPage}
+            page={page}
+            onPageChange={handleChangePage}
+            onRowsPerPageChange={handleChangeRowsPerPage}
+          />
+        </TableContainer>
       )}
 
       {/* Modal */}
       {modalOpen && selectedOrder && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-lg p-8 w-full max-w-3xl">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-bold text-gray-800">Order #{selectedOrder.id} Details</h2>
-              <button onClick={handleModalClose} className="text-gray-600 hover:text-gray-800">
-                <XMarkIcon className="h-6 w-6" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSubmit} className="grid grid-cols-2 sm:grid-cols-1 gap-6 max-h-[80vh] overflow-y-auto">
-              <div className="col-span-1">
-                <label className="block text-gray-700 font-semibold mb-2">Status</label>
-                <select
-                  id="status"
-                  name="status"
-                  value={formData.status}
-                  onChange={handleInputChange}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-                  required
-                >
-                  <option value="PENDING">Pending</option>
-                  <option value="CONFIRMED">Confirmed</option>
-                  <option value="CANCELLED">Cancelled</option>
-                  <option value="COMPLETED">Completed</option>
-                </select>
-              </div>
-              <div className="col-span-1">
-                <label className="block text-gray-700 font-semibold mb-2">Total Amount</label>
-                <p className="p-3 bg-gray-100 rounded-lg text-gray-800">{selectedOrder.totalAmount.toFixed(2)}</p>
-              </div>
-              <div className="col-span-1">
-                <label className="block text-gray-700 font-semibold mb-2">Order Type</label>
-                <p className="p-3 bg-gray-100 rounded-lg text-gray-800">{selectedOrder.order_type || 'N/A'}</p>
-              </div>
-              <div className="col-span-1">
-                <label className="block text-gray-700 font-semibold mb-2">Table No</label>
-                <p className="p-3 bg-gray-100 rounded-lg text-gray-800">{selectedOrder.table_no || 'N/A'}</p>
-              </div>
-              <div className="col-span-1">
-                <label className="block text-gray-700 font-semibold mb-2">User Email</label>
-                <p className="p-3 bg-gray-100 rounded-lg text-gray-800">{selectedOrder.user?.email || 'N/A'}</p>
-              </div>
-              <div className="col-span-1">
-                <label className="block text-gray-700 font-semibold mb-2">Restaurant</label>
-                <p className="p-3 bg-gray-100 rounded-lg text-gray-800">{selectedOrder.restaurant?.name || 'N/A'}</p>
-              </div>
-              <div className="col-span-1">
-                <label className="block text-gray-700 font-semibold mb-2">Date</label>
-                <p className="p-3 bg-gray-100 rounded-lg text-gray-800">{selectedOrder.order_date || 'N/A'}</p>
-              </div>
-              <div className="col-span-1">
-                <label className="block text-gray-700 font-semibold mb-2">Time</label>
-                <p className="p-3 bg-gray-100 rounded-lg text-gray-800">{selectedOrder.order_time || 'N/A'}</p>
-              </div>
-              <div className="col-span-1">
-                <label className="block text-gray-700 font-semibold mb-2">Contact Info</label>
-                <p className="p-3 bg-gray-100 rounded-lg text-gray-800">{selectedOrder.contact_info || 'N/A'}</p>
-              </div>
-              <div className="col-span-1">
-                <label className="block text-gray-700 font-semibold mb-2">Transaction ID</label>
-                <p className="p-3 bg-gray-100 rounded-lg text-gray-800">{selectedOrder.trnx_id || 'N/A'}</p>
-              </div>
-              <div className="col-span-2">
-                <label className="block text-gray-700 font-semibold mb-2">Transaction Receipt</label>
-                <p className="p-3 bg-gray-100 rounded-lg text-gray-800">
+        <Dialog open={modalOpen} onClose={handleModalClose} maxWidth="lg" fullWidth>
+          <DialogTitle sx={{ bgcolor: '#1a3c34', color: 'white', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            Order #{selectedOrder.id} Details
+            <IconButton onClick={handleModalClose} sx={{ color: 'white' }}>
+              <CloseIcon />
+            </IconButton>
+          </DialogTitle>
+          <DialogContent sx={{ maxHeight: '80vh', overflowY: 'auto' }}>
+            <Box component="form" onSubmit={handleSubmit} sx={{ mt: 2, display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
+              <Box>
+                <Typography variant="subtitle1" sx={{ fontWeight: 'bold', mb: 1 }}>
+                  Status
+                </Typography>
+                <FormControl fullWidth>
+                  <InputLabel>Status</InputLabel>
+                  <Select
+                    name="status"
+                    value={formData.status}
+                    onChange={handleInputChange}
+                    label="Status"
+                    required
+                  >
+                    <MenuItem value="PENDING">Pending</MenuItem>
+                    <MenuItem value="CONFIRMED">Confirmed</MenuItem>
+                    <MenuItem value="CANCELLED">Cancelled</MenuItem>
+                    <MenuItem value="COMPLETED">Completed</MenuItem>
+                  </Select>
+                </FormControl>
+              </Box>
+              <Box>
+                <Typography variant="subtitle1" sx={{ fontWeight: 'bold', mb: 1 }}>
+                  Total Amount
+                </Typography>
+                <Typography sx={{ p: 2, bgcolor: '#f5f5f5', borderRadius: '8px' }}>
+                  ${selectedOrder.totalAmount.toFixed(2)}
+                </Typography>
+              </Box>
+              <Box>
+                <Typography variant="subtitle1" sx={{ fontWeight: 'bold', mb: 1 }}>
+                  Order Type
+                </Typography>
+                <Typography sx={{ p: 2, bgcolor: '#f5f5f5', borderRadius: '8px' }}>
+                  {selectedOrder.order_type || 'N/A'}
+                </Typography>
+              </Box>
+              <Box>
+                <Typography variant="subtitle1" sx={{ fontWeight: 'bold', mb: 1 }}>
+                  Table No
+                </Typography>
+                <Typography sx={{ p: 2, bgcolor: '#f5f5f5', borderRadius: '8px' }}>
+                  {selectedOrder.table_no || 'N/A'}
+                </Typography>
+              </Box>
+              <Box>
+                <Typography variant="subtitle1" sx={{ fontWeight: 'bold', mb: 1 }}>
+                  User Email
+                </Typography>
+                <Typography sx={{ p: 2, bgcolor: '#f5f5f5', borderRadius: '8px' }}>
+                  {selectedOrder.user?.email || 'N/A'}
+                </Typography>
+              </Box>
+              <Box>
+                <Typography variant="subtitle1" sx={{ fontWeight: 'bold', mb: 1 }}>
+                  Restaurant
+                </Typography>
+                <Typography sx={{ p: 2, bgcolor: '#f5f5f5', borderRadius: '8px' }}>
+                  {selectedOrder.restaurant?.name || 'N/A'}
+                </Typography>
+              </Box>
+              <Box>
+                <Typography variant="subtitle1" sx={{ fontWeight: 'bold', mb: 1 }}>
+                  Date
+                </Typography>
+                <Typography sx={{ p: 2, bgcolor: '#f5f5f5', borderRadius: '8px' }}>
+                  {selectedOrder.order_date || 'N/A'}
+                </Typography>
+              </Box>
+              <Box>
+                <Typography variant="subtitle1" sx={{ fontWeight: 'bold', mb: 1 }}>
+                  Time
+                </Typography>
+                <Typography sx={{ p: 2, bgcolor: '#f5f5f5', borderRadius: '8px' }}>
+                  {selectedOrder.order_time || 'N/A'}
+                </Typography>
+              </Box>
+              <Box>
+                <Typography variant="subtitle1" sx={{ fontWeight: 'bold', mb: 1 }}>
+                  Contact Info
+                </Typography>
+                <Typography sx={{ p: 2, bgcolor: '#f5f5f5', borderRadius: '8px' }}>
+                  {selectedOrder.contact_info || 'N/A'}
+                </Typography>
+              </Box>
+              <Box>
+                <Typography variant="subtitle1" sx={{ fontWeight: 'bold', mb: 1 }}>
+                  Transaction ID
+                </Typography>
+                <Typography sx={{ p: 2, bgcolor: '#f5f5f5', borderRadius: '8px' }}>
+                  {selectedOrder.trnx_id || 'N/A'}
+                </Typography>
+              </Box>
+              <Box sx={{ gridColumn: { xs: '1 / 2', sm: '1 / 3' } }}>
+                <Typography variant="subtitle1" sx={{ fontWeight: 'bold', mb: 1 }}>
+                  Transaction Receipt
+                </Typography>
+                <Typography sx={{ p: 2, bgcolor: '#f5f5f5', borderRadius: '8px' }}>
                   {selectedOrder.trnx_receipt ? (
                     <a
                       href={selectedOrder.trnx_receipt}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-blue-600 hover:underline"
+                      style={{ color: '#1976d2', textDecoration: 'underline' }}
                     >
                       View Receipt
                     </a>
                   ) : (
                     'N/A'
                   )}
-                </p>
-              </div>
-              <div className="col-span-2">
-                <label className="block text-gray-700 font-semibold mb-2">Order Items</label>
+                </Typography>
+              </Box>
+              <Box sx={{ gridColumn: { xs: '1 / 2', sm: '1 / 3' } }}>
+                <Typography variant="subtitle1" sx={{ fontWeight: 'bold', mb: 1 }}>
+                  Order Items
+                </Typography>
                 {selectedOrder.orderItems.length > 0 ? (
-                  <div className="space-y-3">
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                     {selectedOrder.orderItems.map((item) => (
-                      <div
+                      <Box
                         key={item.id}
-                        className="flex items-center space-x-4 p-3 bg-gray-50 border border-gray-200 rounded-md"
+                        sx={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          p: 2,
+                          bgcolor: '#f5f5f5',
+                          border: '1px solid #e0e0e0',
+                          borderRadius: '8px',
+                          gap: 2,
+                        }}
                       >
                         {item.dish.imgurl && (
                           <img
                             src={item.dish.imgurl}
                             alt={item.dish.name}
-                            className="h-12 w-12 object-cover rounded-md"
+                            style={{ height: '48px', width: '48px', objectFit: 'cover', borderRadius: '4px' }}
                           />
                         )}
-                        <div>
-                          <p className="text-gray-800 font-medium">{item.dish.name}</p>
-                          <p className="text-gray-600 text-sm">
-                            Quantity: {item.quantity} | Unit Price: {item.unit_rate.toFixed(2)} | Total: {item.price.toFixed(2)}
-                          </p>
-                        </div>
-                      </div>
+                        <Box>
+                          <Typography variant="body1" sx={{ fontWeight: 'medium' }}>
+                            {item.dish.name}
+                          </Typography>
+                          <Typography variant="body2" color="textSecondary">
+                            Quantity: {item.quantity} | Unit Price: ${item.unit_rate.toFixed(2)} | Total: ${item.price.toFixed(2)}
+                          </Typography>
+                        </Box>
+                      </Box>
                     ))}
-                  </div>
+                  </Box>
                 ) : (
-                  <p className="p-3 bg-gray-100 rounded-lg text-gray-800">No items</p>
+                  <Typography sx={{ p: 2, bgcolor: '#f5f5f5', borderRadius: '8px' }}>
+                    No items
+                  </Typography>
                 )}
-              </div>
+              </Box>
               {error && (
-                <div className="col-span-2">
-                  <p className="text-red-500 mb-4">{error}</p>
-                </div>
+                <Box sx={{ gridColumn: { xs: '1 / 2', sm: '1 / 3' }, mt: 2 }}>
+                  <Alert severity="error">{error}</Alert>
+                </Box>
               )}
-              <div className="col-span-2 flex justify-end space-x-4">
-                <button
-                  type="button"
-                  onClick={handleModalClose}
-                  className="px-4 py-2 text-gray-600 hover:text-gray-800 bg-gray-200 hover:bg-gray-300 rounded-lg font-medium transition duration-200"
-                >
-                  Close
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-green-600 hover:bg-green-800 text-white rounded-lg font-medium transition duration-200"
-                >
-                  Update Status
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+            </Box>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={handleModalClose} color="inherit">
+              Close
+            </Button>
+            <Button
+              type="submit"
+              variant="contained"
+              color="success"
+              onClick={handleSubmit}
+              sx={{ borderRadius: '20px', textTransform: 'none' }}
+            >
+              Update Status
+            </Button>
+          </DialogActions>
+        </Dialog>
       )}
-    </div>
+    </Box>
   );
 }

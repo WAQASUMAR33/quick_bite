@@ -1,7 +1,34 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { useAuth } from '../../lib/authContext';
-import { PlusIcon, PencilIcon, TrashIcon, XMarkIcon } from '@heroicons/react/24/outline';
+import {
+  Box,
+  Typography,
+  Button,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  TablePagination,
+  TextField,
+  Select,
+  MenuItem,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  FormControl,
+  InputLabel,
+  Alert,
+  Paper,
+  IconButton,
+  CircularProgress,
+  Checkbox,
+  FormControlLabel,
+} from '@mui/material';
+import { Add as AddIcon, Edit as EditIcon, Delete as DeleteIcon, Close as CloseIcon } from '@mui/icons-material';
 
 const convertToBase64 = (file) => {
   return new Promise((resolve, reject) => {
@@ -12,21 +39,22 @@ const convertToBase64 = (file) => {
   });
 };
 
-const uploadImageToServer = async (base64Image) => {
+const uploadImageToServer = async (base64Image, token) => {
   try {
     const uploadApiUrl = process.env.NEXT_PUBLIC_IMAGE_UPLOAD_API;
     if (!uploadApiUrl) {
       throw new Error('Image upload API URL is not defined');
     }
-    console.log('Uploading image to:', uploadApiUrl);
     const response = await fetch(uploadApiUrl, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
       body: JSON.stringify({ image: base64Image }),
     });
     const text = await response.text();
     if (!response.ok) {
-      console.error('Image upload raw response:', text);
       throw new Error(`Image upload failed: HTTP ${response.status}`);
     }
     const data = JSON.parse(text);
@@ -39,15 +67,15 @@ const uploadImageToServer = async (base64Image) => {
     }
     return fullPath;
   } catch (error) {
-    console.error('Image upload error:', error);
     throw error;
   }
 };
 
 export default function MenuManagementPage() {
-  const { restaurant } = useAuth();
+  const { restaurant, token } = useAuth();
   const [dishes, setDishes] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [filteredDishes, setFilteredDishes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState('add'); // 'add', 'edit', 'delete'
@@ -63,12 +91,17 @@ export default function MenuManagementPage() {
   const [imageFile, setImageFile] = useState(null);
   const [imagePreview, setImagePreview] = useState('');
   const [error, setError] = useState('');
+  // Pagination states
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(5);
+  // Filter states
+  const [filterName, setFilterName] = useState('');
+  const [filterCategory, setFilterCategory] = useState('');
+  const [filterAvailable, setFilterAvailable] = useState('');
 
   // Fetch dishes and categories on mount
   useEffect(() => {
-    console.log('MenuManagementPage useEffect: restaurant=', restaurant);
     if (!restaurant || !restaurant.id) {
-      console.log('MenuManagementPage: No restaurant or restaurant.id, setting loading=false');
       setError('Please log in as a restaurant to view dishes');
       setLoading(false);
       return;
@@ -77,49 +110,55 @@ export default function MenuManagementPage() {
     fetchDishes();
   }, [restaurant]);
 
-  const fetchCategories = async () => {
-    console.log('fetchCategories: Starting fetch');
-    try {
-      const response = await fetch(`/api/categories?restaurantId=${restaurant.id}`);
-      console.log('fetchCategories: Response status=', response.status);
-      const data = await response.json();
-      console.log('fetchCategories: Response data=', data);
+  // Apply filters
+  useEffect(() => {
+    const filtered = dishes.filter((dish) => {
+      const matchesName = dish.name.toLowerCase().includes(filterName.toLowerCase());
+      const matchesCategory = filterCategory ? dish.categoryId === parseInt(filterCategory) : true;
+      const matchesAvailable = filterAvailable !== '' ? dish.available === (filterAvailable === 'true') : true;
+      return matchesName && matchesCategory && matchesAvailable;
+    });
+    setFilteredDishes(filtered);
+    setPage(0);
+  }, [dishes, filterName, filterCategory, filterAvailable]);
 
+  const fetchCategories = async () => {
+    try {
+      const response = await fetch(`/api/categories?restaurantId=${restaurant.id}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      const data = await response.json();
       if (!response.ok) {
         throw new Error(data.error || `HTTP ${response.status}: Failed to fetch categories`);
       }
       if (!Array.isArray(data.data)) {
         throw new Error('Expected categories data to be an array');
       }
-
       setCategories(data.data);
-      console.log('fetchCategories: Success, categories=', data.data);
     } catch (err) {
-      console.error('fetchCategories: Error=', err.message, err.stack);
       setError(`Failed to load categories: ${err.message}`);
     }
   };
 
   const fetchDishes = async () => {
-    console.log('fetchDishes: Starting fetch');
     try {
-      const response = await fetch(`/api/menus?restaurantId=${restaurant.id}`);
-      console.log('fetchDishes: Response status=', response.status);
+      const response = await fetch(`/api/menus?restaurantId=${restaurant.id}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
       const data = await response.json();
-      console.log('fetchDishes: Response data=', data);
-
       if (!response.ok) {
         throw new Error(data.error || `HTTP ${response.status}: Failed to fetch dishes`);
       }
       if (!Array.isArray(data.data)) {
         throw new Error('Expected dishes data to be an array');
       }
-
       setDishes(data.data);
       setLoading(false);
-      console.log('fetchDishes: Success, dishes=', data.data);
     } catch (err) {
-      console.error('fetchDishes: Error=', err.message, err.stack);
       setError(`Failed to load dishes: ${err.message}`);
       setLoading(false);
     }
@@ -177,7 +216,7 @@ export default function MenuManagementPage() {
         setImageFile(file);
         const base64 = await convertToBase64(file);
         setImagePreview(base64);
-        setFormData({ ...formData, imgurl: '' }); // Reset imgurl until upload
+        setFormData({ ...formData, imgurl: '' });
       } catch (error) {
         setError('Failed to process image');
       }
@@ -203,15 +242,12 @@ export default function MenuManagementPage() {
 
     try {
       let imgurl = formData.imgurl;
-
-      // Upload image if a file is selected
       if (imageFile) {
         const base64Image = await convertToBase64(imageFile);
-        imgurl = await uploadImageToServer(base64Image);
+        imgurl = await uploadImageToServer(base64Image, token);
       }
 
       let response;
-
       if (modalMode === 'add') {
         const payload = {
           categoryId: parseInt(categoryId),
@@ -225,6 +261,7 @@ export default function MenuManagementPage() {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify(payload),
         });
@@ -241,6 +278,7 @@ export default function MenuManagementPage() {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify(payload),
         });
@@ -248,7 +286,7 @@ export default function MenuManagementPage() {
         response = await fetch(`/api/menus/${selectedDish.id}`, {
           method: 'DELETE',
           headers: {
-            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
           },
         });
       }
@@ -263,255 +301,311 @@ export default function MenuManagementPage() {
     }
   };
 
+  // Pagination handlers
+  const handleChangePage = (event, newPage) => {
+    setPage(newPage);
+  };
+
+  const handleChangeRowsPerPage = (event) => {
+    setRowsPerPage(parseInt(event.target.value, 10));
+    setPage(0);
+  };
+
+  // Filter handlers
+  const handleFilterNameChange = (e) => {
+    setFilterName(e.target.value);
+  };
+
+  const handleFilterCategoryChange = (e) => {
+    setFilterCategory(e.target.value);
+  };
+
+  const handleFilterAvailableChange = (e) => {
+    setFilterAvailable(e.target.value);
+  };
+
   if (!restaurant || !restaurant.id) {
-    return <div className="p-6 text-red-500">Please log in as a restaurant to view dishes.</div>;
+    return (
+      <Box sx={{ p: 3 }}>
+        <Alert severity="error">Please log in as a restaurant to view dishes.</Alert>
+      </Box>
+    );
   }
 
   return (
-    <div className="p-6 bg-gray-50 min-h-screen">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold text-gray-800">Menu Management</h1>
-        <button
+    <Box sx={{ p: 3, bgcolor: '#f5f5f5', minHeight: '100vh' }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+        <Typography variant="h5" sx={{ fontWeight: 'bold', color: '#1a3c34' }}>
+          Menu Management
+        </Typography>
+        <Button
+          variant="contained"
+          color="success"
+          startIcon={<AddIcon />}
           onClick={() => handleModalOpen('add')}
-          className="flex items-center bg-green-600 hover:bg-green-700 text-white py-2 px-4 rounded-lg transition duration-200"
+          sx={{ borderRadius: '20px', textTransform: 'none', boxShadow: '0 4px 10px rgba(0, 128, 0, 0.2)' }}
         >
-          <PlusIcon className="h-5 w-5 mr-2" />
           Add Dish
-        </button>
-      </div>
+        </Button>
+      </Box>
+
+      {/* Filters */}
+      <Box sx={{ mb: 3, display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+        <TextField
+          label="Filter by Dish Name"
+          value={filterName}
+          onChange={handleFilterNameChange}
+          variant="outlined"
+          size="small"
+          sx={{ minWidth: 200 }}
+        />
+        <FormControl sx={{ minWidth: 200 }} size="small">
+          <InputLabel>Filter by Category</InputLabel>
+          <Select
+            value={filterCategory}
+            onChange={handleFilterCategoryChange}
+            label="Filter by Category"
+          >
+            <MenuItem value="">All</MenuItem>
+            {categories.map((category) => (
+              <MenuItem key={category.id} value={category.id}>
+                {category.name}
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+        <FormControl sx={{ minWidth: 200 }} size="small">
+          <InputLabel>Filter by Availability</InputLabel>
+          <Select
+            value={filterAvailable}
+            onChange={handleFilterAvailableChange}
+            label="Filter by Availability"
+          >
+            <MenuItem value="">All</MenuItem>
+            <MenuItem value="true">Available</MenuItem>
+            <MenuItem value="false">Not Available</MenuItem>
+          </Select>
+        </FormControl>
+      </Box>
 
       {error && (
-        <div className="mb-6 p-4 bg-red-100 text-red-700 rounded-lg flex justify-between items-center">
-          <p>{error}</p>
-          <button
-            onClick={fetchDishes}
-            className="bg-blue-600 hover:bg-blue-700 text-white py-1 px-3 rounded-lg transition duration-200"
+        <Box sx={{ mb: 3 }}>
+          <Alert
+            severity="error"
+            action={
+              <Button color="inherit" size="small" onClick={fetchDishes}>
+                Retry
+              </Button>
+            }
           >
-            Retry
-          </button>
-        </div>
+            {error}
+          </Alert>
+        </Box>
       )}
+
       {loading ? (
-        <p className="text-gray-600">Loading...</p>
-      ) : dishes.length === 0 ? (
-        <p className="text-gray-600">No dishes found.</p>
+        <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
+          <CircularProgress />
+        </Box>
+      ) : filteredDishes.length === 0 ? (
+        <Typography>No dishes found.</Typography>
       ) : (
-        <div className="overflow-x-auto bg-white shadow-md rounded-lg">
-          <table className="min-w-full">
-            <thead>
-              <tr className="bg-gray-200 text-gray-600 uppercase text-sm">
-                <th className="py-3 px-6 text-left">Name</th>
-                <th className="py-3 px-6 text-left">Image</th>
-                <th className="py-3 px-6 text-left">Category</th>
-                <th className="py-3 px-6 text-left">Price</th>
-                <th className="py-3 px-6 text-left">Available</th>
-                <th className="py-3 px-6 text-left">Created At</th>
-                <th className="py-3 px-6 text-center">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {dishes.map((dish) => (
-                <tr key={dish.id} className="border-b hover:bg-gray-50">
-                  <td className="py-3 px-6">{dish.name}</td>
-                  <td className="py-3 px-6">
-                    {dish.imgurl ? (
-                      <img src={dish.imgurl} alt={dish.name} className="h-10 w-10 object-cover rounded" />
-                    ) : (
-                      'No image'
-                    )}
-                  </td>
-                  <td className="py-3 px-6">{dish.category?.name || 'N/A'}</td>
-                  <td className="py-3 px-6">{dish.price.toFixed(2)}</td>
-                  <td className="py-3 px-6">
-                    <span
-                      className={`inline-block px-2 py-1 rounded-full text-xs font-semibold ${
-                        dish.available ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                      }`}
-                    >
-                      {dish.available ? 'Yes' : 'No'}
-                    </span>
-                  </td>
-                  <td className="py-3 px-6">{new Date(dish.createdAt).toLocaleDateString()}</td>
-                  <td className="py-3 px-6 text-center">
-                    <button
-                      onClick={() => handleModalOpen('edit', dish)}
-                      className="text-blue-600 hover:text-blue-800 mr-4"
-                    >
-                      <PencilIcon className="h-5 w-5" />
-                    </button>
-                    <button
-                      onClick={() => handleModalOpen('delete', dish)}
-                      className="text-red-600 hover:text-red-800"
-                    >
-                      <TrashIcon className="h-5 w-5" />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <TableContainer component={Paper} sx={{ boxShadow: '0 4px 20px rgba(0, 0, 0, 0.1)', borderRadius: '0px' }}>
+          <Table>
+            <TableHead>
+              <TableRow sx={{ bgcolor: '#1B5E20' }}>
+                <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Name</TableCell>
+                <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Image</TableCell>
+                <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Category</TableCell>
+                <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Price</TableCell>
+                <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Available</TableCell>
+                <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Created At</TableCell>
+                <TableCell sx={{ color: 'white', fontWeight: 'bold', textAlign: 'center' }}>Actions</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {filteredDishes
+                .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
+                .map((dish) => (
+                  <TableRow key={dish.id} sx={{ '&:hover': { bgcolor: '#f0f0f0' } }}>
+                    <TableCell>{dish.name}</TableCell>
+                    <TableCell>
+                      {dish.imgurl ? (
+                        <img src={dish.imgurl} alt={dish.name} style={{ height: '40px', width: '40px', objectFit: 'cover', borderRadius: '4px' }} />
+                      ) : (
+                        'No image'
+                      )}
+                    </TableCell>
+                    <TableCell>{dish.category?.name || 'N/A'}</TableCell>
+                    <TableCell>${dish.price.toFixed(2)}</TableCell>
+                    <TableCell>
+                      <span
+                        style={{
+                          padding: '4px 8px',
+                          borderRadius: '12px',
+                          fontSize: '12px',
+                          fontWeight: 'bold',
+                          backgroundColor: dish.available ? '#e6f4ea' : '#fdeded',
+                          color: dish.available ? '#2e7d32' : '#d32f2f',
+                        }}
+                      >
+                        {dish.available ? 'Yes' : 'No'}
+                      </span>
+                    </TableCell>
+                    <TableCell>{new Date(dish.createdAt).toLocaleDateString()}</TableCell>
+                    <TableCell sx={{ textAlign: 'center' }}>
+                      <IconButton color="primary" onClick={() => handleModalOpen('edit', dish)}>
+                        <EditIcon />
+                      </IconButton>
+                      <IconButton color="error" onClick={() => handleModalOpen('delete', dish)}>
+                        <DeleteIcon />
+                      </IconButton>
+                    </TableCell>
+                  </TableRow>
+                ))}
+            </TableBody>
+          </Table>
+          <TablePagination
+            rowsPerPageOptions={[5, 10, 25]}
+            component="div"
+            count={filteredDishes.length}
+            rowsPerPage={rowsPerPage}
+            page={page}
+            onPageChange={handleChangePage}
+            onRowsPerPageChange={handleChangeRowsPerPage}
+          />
+        </TableContainer>
       )}
 
       {/* Modal */}
-      {modalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-lg">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-bold">
-                {modalMode === 'add' ? 'Add Dish' : modalMode === 'edit' ? 'Edit Dish' : 'Delete Dish'}
-              </h2>
-              <button onClick={handleModalClose} className="text-gray-600 hover:text-gray-800">
-                <XMarkIcon className="h-6 w-6" />
-              </button>
-            </div>
-
-            {modalMode !== 'delete' ? (
-              <form onSubmit={handleSubmit}>
-                <div className="mb-4">
-                  <label htmlFor="categoryId" className="block text-gray-700 font-medium mb-2">
-                    Category
-                  </label>
-                  <select
-                    id="categoryId"
-                    name="categoryId"
-                    value={formData.categoryId}
-                    onChange={handleInputChange}
-                    className="w-full p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-600"
-                    required
-                  >
-                    {categories.length === 0 ? (
-                      <option value="">No categories available</option>
-                    ) : (
-                      categories.map((category) => (
-                        <option key={category.id} value={category.id}>
-                          {category.name}
-                        </option>
-                      ))
-                    )}
-                  </select>
-                </div>
-                <div className="mb-4">
-                  <label htmlFor="name" className="block text-gray-700 font-medium mb-2">
-                    Dish Name
-                  </label>
-                  <input
-                    type="text"
-                    id="name"
-                    name="name"
-                    value={formData.name}
-                    onChange={handleInputChange}
-                    className="w-full p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-600"
-                    required
-                  />
-                </div>
-                <div className="mb-4">
-                  <label htmlFor="description" className=" seeker-gray-700 font-medium mb-2">
-                    Description
-                  </label>
-                  <textarea
-                    id="description"
-                    name="description"
-                    value={formData.description}
-                    onChange={handleInputChange}
-                    className="w-full p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-600"
-                    rows="4"
-                  />
-                </div>
-                <div className="mb-4">
-                  <label htmlFor="price" className="block text-gray-700 font-medium mb-2">
-                    Price ($)
-                  </label>
-                  <input
-                    type="number"
-                    id="price"
-                    name="price"
-                    value={formData.price}
-                    onChange={handleInputChange}
-                    className="w-full p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-600"
-                    required
-                    min="0.01"
-                    step="0.01"
-                  />
-                </div>
-                <div className="mb-4">
-                  <label htmlFor="image" className="block text-gray-700 font-medium mb-2">
-                    Dish Image
-                  </label>
-                  <input
-                    type="file"
-                    id="image"
-                    name="image"
-                    accept="image/*"
-                    onChange={handleImageChange}
-                    className="w-full p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-600"
-                  />
-                  {(imagePreview || formData.imgurl) && (
-                    <div className="mt-2">
-                      <p className="text-gray-600">Image Preview:</p>
-                      <img
-                        src={imagePreview || formData.imgurl}
-                        alt="Dish preview"
-                        className="h-20 w-20 object-cover rounded"
-                      />
-                    </div>
+      <Dialog open={modalOpen} onClose={handleModalClose} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ bgcolor: '#1a3c34', color: 'white', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          {modalMode === 'add' ? 'Add Dish' : modalMode === 'edit' ? 'Edit Dish' : 'Delete Dish'}
+          <IconButton onClick={handleModalClose} sx={{ color: 'white' }}>
+            <CloseIcon />
+          </IconButton>
+        </DialogTitle>
+        <DialogContent>
+          {modalMode !== 'delete' ? (
+            <Box component="form" onSubmit={handleSubmit} sx={{ mt: 2 }}>
+              <FormControl fullWidth margin="normal">
+                <InputLabel>Category</InputLabel>
+                <Select
+                  name="categoryId"
+                  value={formData.categoryId}
+                  onChange={handleInputChange}
+                  label="Category"
+                  required
+                >
+                  {categories.length === 0 ? (
+                    <MenuItem value="">No categories available</MenuItem>
+                  ) : (
+                    categories.map((category) => (
+                      <MenuItem key={category.id} value={category.id}>
+                        {category.name}
+                      </MenuItem>
+                    ))
                   )}
-                </div>
-                <div className="mb-4">
-                  <label htmlFor="available" className="flex items-center">
-                    <input
-                      type="checkbox"
-                      id="available"
-                      name="available"
-                      checked={formData.available}
-                      onChange={handleInputChange}
-                      className="h-5 w-5 text-green-600 focus:ring-green-600"
-                    />
-                    <span className="ml-2 text-gray-700 font-medium">Available</span>
-                  </label>
-                </div>
-                {error && <p className="text-red-500 mb-4">{error}</p>}
-                <div className="flex justify-end">
-                  <button
-                    type="button"
-                    onClick={handleModalClose}
-                    className="mr-4 text-gray-600 hover:text-gray-800 font-medium"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    className="bg-green-600 hover:bg-green-700 text-white py-2 px-4 rounded-lg transition duration-200"
-                  >
-                    {modalMode === 'add' ? 'Add' : 'Update'}
-                  </button>
-                </div>
-              </form>
-            ) : (
-              <div>
-                <p className="mb-4">
-                  Are you sure you want to delete dish <strong>{selectedDish?.name}</strong>?
-                </p>
-                {error && <p className="text-red-500 mb-4">{error}</p>}
-                <div className="flex justify-end">
-                  <button
-                    type="button"
-                    onClick={handleModalClose}
-                    className="mr-4 text-gray-600 hover:text-gray-800 font-medium">
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleSubmit}
-                    className="bg-red-600 hover:bg-red-700 text-white py-2 px-4 rounded-lg transition duration-200"
-                  >
-                    Delete
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
+                </Select>
+              </FormControl>
+              <TextField
+                label="Dish Name"
+                name="name"
+                value={formData.name}
+                onChange={handleInputChange}
+                fullWidth
+                margin="normal"
+                required
+              />
+              <TextField
+                label="Description"
+                name="description"
+                value={formData.description}
+                onChange={handleInputChange}
+                fullWidth
+                margin="normal"
+                multiline
+                rows={4}
+              />
+              <TextField
+                label="Price ($)"
+                name="price"
+                type="number"
+                value={formData.price}
+                onChange={handleInputChange}
+                fullWidth
+                margin="normal"
+                required
+                inputProps={{ min: 0.01, step: 0.01 }}
+              />
+              <TextField
+                type="file"
+                label="Dish Image"
+                InputLabelProps={{ shrink: true }}
+                name="image"
+                onChange={handleImageChange}
+                fullWidth
+                margin="normal"
+                inputProps={{ accept: 'image/*' }}
+              />
+              {(imagePreview || formData.imgurl) && (
+                <Box sx={{ mt: 2 }}>
+                  <Typography variant="body2" color="textSecondary">
+                    Image Preview:
+                  </Typography>
+                  <img
+                    src={imagePreview || formData.imgurl}
+                    alt="Dish preview"
+                    style={{ height: '80px', width: '80px', objectFit: 'cover', borderRadius: '4px' }}
+                  />
+                </Box>
+              )}
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    name="available"
+                    checked={formData.available}
+                    onChange={handleInputChange}
+                    color="success"
+                  />
+                }
+                label="Available"
+                sx={{ mt: 2 }}
+              />
+              {error && <Alert severity="error" sx={{ mt: 2 }}>{error}</Alert>}
+            </Box>
+          ) : (
+            <Typography>
+              Are you sure you want to delete dish <strong>{selectedDish?.name}</strong>?
+            </Typography>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleModalClose} color="inherit">
+            Cancel
+          </Button>
+          {modalMode !== 'delete' ? (
+            <Button
+              type="submit"
+              variant="contained"
+              color="success"
+              onClick={handleSubmit}
+              sx={{ borderRadius: '20px', textTransform: 'none' }}
+            >
+              {modalMode === 'add' ? 'Add' : 'Update'}
+            </Button>
+          ) : (
+            <Button
+              variant="contained"
+              color="error"
+              onClick={handleSubmit}
+              sx={{ borderRadius: '20px', textTransform: 'none' }}
+            >
+              Delete
+            </Button>
+          )}
+        </DialogActions>
+      </Dialog>
+    </Box>
   );
 }
