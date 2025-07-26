@@ -48,7 +48,7 @@ export default function CreateRestaurantPage() {
 
     loader.load().then(() => {
       if (mapRef.current && !mapInstanceRef.current) {
-        const defaultLocation = { lat: 40.7128, lng: -74.0060 };
+        const defaultLocation = { lat: 32.5798, lng: 73.4813 };
         mapInstanceRef.current = new google.maps.Map(mapRef.current, {
           center: defaultLocation,
           zoom: 12,
